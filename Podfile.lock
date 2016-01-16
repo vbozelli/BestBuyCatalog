@@ -1,0 +1,19 @@
+PODS:
+  - Alamofire (3.1.4)
+  - CCBottomRefreshControl (0.5.1):
+    - Masonry (~> 0.6.2)
+  - Masonry (0.6.4)
+  - SwiftyJSON (2.3.2)
+
+DEPENDENCIES:
+  - Alamofire
+  - CCBottomRefreshControl
+  - SwiftyJSON
+
+SPEC CHECKSUMS:
+  Alamofire: fbc829692f351fa1d8a31dd75fd7f7f56fea31fb
+  CCBottomRefreshControl: 57a596348855260f627ffc2b311328ed15b94877
+  Masonry: 281802d04d787ea2973179ee8bcb50500579ede2
+  SwiftyJSON: 04ccea08915aa0109039157c7974cf0298da292a
+
+COCOAPODS: 0.39.0
