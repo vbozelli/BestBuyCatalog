@@ -13,7 +13,6 @@ class ProductModel: NSObject
     var name: String!
     var brand: String!
     var price: Float!
-    var image: UIImage?
     var imageUrl: String?
     var largeImageUrl: String?
 }

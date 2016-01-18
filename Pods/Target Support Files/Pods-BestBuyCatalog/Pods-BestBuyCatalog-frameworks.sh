@@ -85,13 +85,13 @@ strip_invalid_archs() {
 
 if [[ "$CONFIGURATION" == "Debug" ]]; then
   install_framework "Pods-BestBuyCatalog/Alamofire.framework"
+  install_framework "Pods-BestBuyCatalog/AlamofireImage.framework"
   install_framework "Pods-BestBuyCatalog/CCBottomRefreshControl.framework"
   install_framework "Pods-BestBuyCatalog/Masonry.framework"
-  install_framework "Pods-BestBuyCatalog/SwiftyJSON.framework"
 fi
 if [[ "$CONFIGURATION" == "Release" ]]; then
   install_framework "Pods-BestBuyCatalog/Alamofire.framework"
+  install_framework "Pods-BestBuyCatalog/AlamofireImage.framework"
   install_framework "Pods-BestBuyCatalog/CCBottomRefreshControl.framework"
   install_framework "Pods-BestBuyCatalog/Masonry.framework"
-  install_framework "Pods-BestBuyCatalog/SwiftyJSON.framework"
 fi

@@ -7,25 +7,26 @@
 //
 
 import Alamofire
+import AlamofireImage
 import CoreData
-import SwiftyJSON
 import UIKit
 
-class ProductsViewController: UIViewController, UICollectionViewDataSource, UICollectionViewDelegate, UISearchBarDelegate
+class ProductsViewController: UIViewController, UICollectionViewDataSource, UISearchBarDelegate
 {
     let application = UIApplication.sharedApplication()
     let context: NSManagedObjectContext = (UIApplication.sharedApplication().delegate as! AppDelegate).managedObjectContext!
-    let folder = NSSearchPathForDirectoriesInDomains(.DocumentDirectory, NSSearchPathDomainMask.UserDomainMask, true)[0]
+    let imageDownloader = ImageDownloader.defaultInstance
+    let userDefaults = NSUserDefaults.standardUserDefaults()
     var ascending = false
     var page = 1
     var products1Model: [ProductModel] = []
     var productsModel: [ProductModel] = []
     var products: [Product] = []
     var search = false
-    var request: Request! = nil
+    var request: Request?
     var refreshControlTop: UIRefreshControl!
     var refreshControlBottom: UIRefreshControl!
-    @IBOutlet var activityIndicatorView: UIActivityIndicatorView!
+    @IBOutlet var activityIndicatorView: UIActivityIndicatorView?
     @IBOutlet var productsCollectionView: UICollectionView!
     @IBOutlet var searchBar: UISearchBar!
     override func viewDidLoad()
@@ -33,11 +34,7 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UICo
         super.viewDidLoad()
         let imageView = UIImageView(image: UIImage(named: "sort"))
         imageView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: Selector("sort")))
-        let barButtonItem = UIBarButtonItem(customView: imageView)
-        barButtonItem.style = .Plain
-        barButtonItem.target = self
-        barButtonItem.action = Selector("sort")
-        self.navigationItem.rightBarButtonItem = barButtonItem
+        self.navigationItem.rightBarButtonItem = UIBarButtonItem(customView: imageView)
         refreshControlTop = UIRefreshControl()
         refreshControlTop.tintColor = UIColor.whiteColor()
         refreshControlTop.addTarget(self, action: Selector("refreshTop"), forControlEvents: .ValueChanged)
@@ -46,7 +43,11 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UICo
         refreshControlBottom.tintColor = UIColor.whiteColor()
         refreshControlBottom.addTarget(self, action: Selector("refreshBottom"), forControlEvents: .ValueChanged)
         productsCollectionView.bottomRefreshControl = refreshControlBottom
-        searchBar.delegate = self
+        let searchField = searchBar.valueForKey("searchField") as! UITextField
+        searchField.textColor = UIColor.whiteColor()
+        let searchIcon = searchField.leftView as! UIImageView
+        searchIcon.image = searchIcon.image?.imageWithRenderingMode(.AlwaysTemplate)
+        searchIcon.tintColor = UIColor.whiteColor()
         var results: [Product] = []
         do
         {
@@ -63,59 +64,130 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UICo
                 productModel.name = product.name
                 productModel.brand = product.brand
                 productModel.price = product.price
-                productModel.image = UIImage(data: product.image!)
+                productModel.imageUrl = product.image
+                productModel.largeImageUrl = product.largeImage
                 productsModel.append(productModel)
             }
         }
         else
         {
-            activityIndicatorView.startAnimating()
+            activityIndicatorView!.startAnimating()
             application.networkActivityIndicatorVisible = true
-            Alamofire.request(.GET, "http://api.bestbuy.com/v1/products(department=AUDIO)", parameters: ["show" : "name,salePrice,image,largeImage,manufacturer", "pageSize" : "100", "format" : "json", "apiKey" : "djshsuz99nvppzr6gqs8h2yk"], encoding: .URL, headers: nil).responseData { (response) in
-                self.refreshControlTop.enabled = true
-                self.activityIndicatorView.stopAnimating()
+            Alamofire.request(.GET, "http://api.bestbuy.com/v1/products(department=AUDIO)", parameters: ["show" : "name,salePrice,image,largeImage,manufacturer", "pageSize" : "100", "format" : "json", "apiKey" : "djshsuz99nvppzr6gqs8h2yk"], encoding: .URL, headers: nil).responseJSON(completionHandler: { (response) -> Void in
+                self.activityIndicatorView!.stopAnimating()
                 self.application.networkActivityIndicatorVisible = false
                 if response.result.error == nil
                 {
-                    let productsResult = JSON(data: response.result.value!)["products"].arrayValue
+                    let productsResult: NSArray = response.result.value!["products"] as! NSArray
                     for product in productsResult
                     {
-                        let fetchRequest = NSFetchRequest(entityName: "Product")
-                        fetchRequest.predicate = NSPredicate(format: "name == %@", product["name"].stringValue)
-                        var results = []
-                        do
+                        let productModel = ProductModel()
+                        let productInsert = NSEntityDescription.insertNewObjectForEntityForName("Product", inManagedObjectContext: self.context) as! Product
+                        let keys: [String] = (product as! NSDictionary).allKeys as! [String]
+                        if keys.contains("name")
                         {
-                            try results = self.context.executeFetchRequest(fetchRequest)
+                            if !(product["name"] is NSNull)
+                            {
+                                let name = product["name"] as! String
+                                productInsert.name = name
+                                productModel.name = name
+                            }
+                            else
+                            {
+                                productInsert.name = "Unknown"
+                                productModel.name = "Unknown"
+                            }
                         }
-                        catch(_)
+                        else
                         {
+                            productInsert.name = "Unknown"
+                            productModel.name = "Unknown"
                         }
-                        if results.count == 0
+                        if keys.contains("manufacturer")
                         {
-                            let productModel = ProductModel()
-                            let productInsert = NSEntityDescription.insertNewObjectForEntityForName("Product", inManagedObjectContext: self.context) as! Product
-                            productInsert.name = product["name"].stringValue
-                            productModel.name = product["name"].stringValue
-                            if product["manufacturer"] == nil
+                            if !(product["manufacturer"] is NSNull)
+                            {
+                                let brand = product["manufacturer"] as! String
+                                productInsert.brand = brand
+                                productModel.brand = brand
+                            }
+                            else
                             {
                                 productInsert.brand = "Unknown"
                                 productModel.brand = "Unknown"
                             }
+                        }
+                        else
+                        {
+                            productInsert.brand = "Unknown"
+                            productModel.brand = "Unknown"
+                        }
+                        if keys.contains("salePrice")
+                        {
+                            if !(product["salePrice"] is NSNull)
+                            {
+                                let price = product["salePrice"] as! Float
+                                productInsert.price = price
+                                productModel.price = price
+                            }
                             else
                             {
-                                productInsert.brand = product["manufacturer"].stringValue
-                                productModel.brand = product["manufacturer"].stringValue
+                                productInsert.price = 0
+                                productModel.price = 0
                             }
-                            productInsert.price = product["salePrice"].floatValue
-                            self.products.append(productInsert)
-                            productModel.price = product["salePrice"].floatValue
-                            productModel.imageUrl = product["image"].stringValue
-                            productModel.largeImageUrl = product["largeImage"].stringValue
-                            self.productsModel.append(productModel)
-                            self.context.insertObject(productInsert)
                         }
+                        else
+                        {
+                            productInsert.price = 0
+                            productModel.price = 0
+                        }
+                        if keys.contains("image")
+                        {
+                            if !(product["image"] is NSNull)
+                            {
+                                let image = product["image"] as! String
+                                productInsert.image = image
+                                productModel.imageUrl = image
+                            }
+                            else
+                            {
+                                productInsert.image = nil
+                                productModel.imageUrl = nil
+                            }
+                        }
+                        else
+                        {
+                            productInsert.image = nil
+                            productModel.imageUrl = nil
+                        }
+                        if keys.contains("largeImage")
+                        {
+                            if !(product["largeImage"] is NSNull)
+                            {
+                                let largeImage = product["largeImage"] as! String
+                                productInsert.largeImage = largeImage
+                            }
+                            else
+                            {
+                                productInsert.largeImage = nil
+                            }
+                        }
+                        else
+                        {
+                            productInsert.largeImage = nil
+                        }
+                        self.productsModel.append(productModel)
+                        self.products.append(productInsert)
+                        self.context.insertObject(productInsert)
                     }
                     self.productsCollectionView.reloadData()
+                    do
+                    {
+                        try self.context.save()
+                    }
+                    catch(_)
+                    {
+                    }
                 }
                 else if response.result.error?.code == NSURLErrorNotConnectedToInternet
                 {
@@ -123,7 +195,15 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UICo
                     alertViewController.addAction(UIAlertAction(title: "OK", style: .Default, handler: nil))
                     self.presentViewController(alertViewController, animated: true, completion: nil)
                 }
-            }
+            })
+        }
+        if userDefaults.dictionaryRepresentation().keys.contains("page")
+        {
+            userDefaults.setInteger(page, forKey: "page")
+        }
+        else
+        {
+            page = userDefaults.integerForKey("page")
         }
     }
     func sort()
@@ -153,78 +233,121 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UICo
     func refreshTop()
     {
         application.networkActivityIndicatorVisible = true
-        Alamofire.request(.GET, "http://api.bestbuy.com/v1/products(department=AUDIO)", parameters: ["show" : "name,salePrice,image,largeImage,manufacturer", "pageSize" : "100", "format" : "json", "apiKey" : "djshsuz99nvppzr6gqs8h2yk"], encoding: .URL, headers: nil).responseData { (response) in
-            self.refreshControlTop.endRefreshing()
+        Alamofire.request(.GET, "http://api.bestbuy.com/v1/products(department=AUDIO)", parameters: ["show" : "name,salePrice,image,largeImage,manufacturer", "pageSize" : "100", "format" : "json", "apiKey" : "djshsuz99nvppzr6gqs8h2yk"], encoding: .URL, headers: nil).responseJSON(completionHandler: { (response) -> Void in
+            self.activityIndicatorView!.stopAnimating()
             self.application.networkActivityIndicatorVisible = false
             if response.result.error == nil
             {
-                //self.products = JSON(data: response.result.value!)["products"].arrayValue
-                self.productsCollectionView.reloadData()
-            }
-            else if response.result.error == NSURLErrorNotConnectedToInternet
-            {
-                let alertViewController = UIAlertController(title: "Atention", message: "Internet connection not available", preferredStyle: .Alert)
-                alertViewController.addAction(UIAlertAction(title: "OK", style: .Default, handler: nil))
-                self.presentViewController(alertViewController, animated: true, completion: nil)
-            }
-        }
-    }
-    func refreshBottom()
-    {
-        application.networkActivityIndicatorVisible = true
-        page++
-        Alamofire.request(.GET, "http://api.bestbuy.com/v1/products(department=AUDIO)", parameters: ["show" : "name,salePrice,image,largeImage,manufacturer", "pageSize" : "100", "format" : "json", "apiKey" : "djshsuz99nvppzr6gqs8h2yk", "page" : page], encoding: .URL, headers: nil).responseData { (response) in
-            self.application.networkActivityIndicatorVisible = false
-            self.refreshControlBottom.endRefreshing()
-            if response.result.error == nil
-            {
-                let productsResult = JSON(data: response.result.value!)["products"].arrayValue
-                var indexPaths: [NSIndexPath] = []
-                var indice = self.productsModel.count
+                let productsResult: NSArray = response.result.value!["products"] as! NSArray
                 for product in productsResult
                 {
-                    let fetchRequest = NSFetchRequest(entityName: "Product")
-                    fetchRequest.predicate = NSPredicate(format: "name == %@", product["name"].stringValue)
-                    var results = []
-                    do
+                    let productModel = ProductModel()
+                    let productInsert = NSEntityDescription.insertNewObjectForEntityForName("Product", inManagedObjectContext: self.context) as! Product
+                    let keys: [String] = (product as! NSDictionary).allKeys as! [String]
+                    if keys.contains("name")
                     {
-                        try results = self.context.executeFetchRequest(fetchRequest)
+                        if product["name"] != nil
+                        {
+                            let name = product["name"] as! String
+                            productInsert.name = name
+                            productModel.name = name
+                        }
+                        else
+                        {
+                            productInsert.name = "Unknown"
+                            productModel.name = "Unknown"
+                        }
                     }
-                    catch(_)
+                    else
                     {
+                        productInsert.name = "Unknown"
+                        productModel.name = "Unknown"
                     }
-                    if results.count == 0
+                    if keys.contains("manufacturer")
                     {
-                        let productModel = ProductModel()
-                        let productInsert = NSEntityDescription.insertNewObjectForEntityForName("Product", inManagedObjectContext: self.context) as! Product
-                        productInsert.name = product["name"].stringValue
-                        productModel.name = product["name"].stringValue
-                        if product["manufacturer"] == nil
+                        if product["manufacturer"] != nil
+                        {
+                            let brand = product["manufacturer"] as! String
+                            productInsert.brand = brand
+                            productModel.brand = brand
+                        }
+                        else
                         {
                             productInsert.brand = "Unknown"
                             productModel.brand = "Unknown"
                         }
+                    }
+                    else
+                    {
+                        productInsert.brand = "Unknown"
+                        productModel.brand = "Unknown"
+                    }
+                    if keys.contains("salePrice")
+                    {
+                        if product["salePrice"] != nil
+                        {
+                            let price = product["salePrice"] as! Float
+                            productInsert.price = price
+                            productModel.price = price
+                        }
                         else
                         {
-                            productInsert.brand = product["manufacturer"].stringValue
-                            productModel.brand = product["manufacturer"].stringValue
+                            productInsert.price = 0
+                            productModel.price = 0
                         }
-                        productInsert.price = product["salePrice"].floatValue
-                        self.products.append(productInsert)
-                        productModel.price = product["salePrice"].floatValue
-                        productModel.imageUrl = product["image"].stringValue
-                        productModel.largeImageUrl = product["largeImage"].stringValue
-                        self.productsModel.append(productModel)
-                        self.context.insertObject(productInsert)
-                        indexPaths.append(NSIndexPath(forRow: indice, inSection: 0))
-                        indice++
                     }
+                    else
+                    {
+                        productInsert.price = 0
+                        productModel.price = 0
+                    }
+                    if keys.contains("image")
+                    {
+                        if product["image"] != nil
+                        {
+                            let image = product["image"] as! String
+                            productInsert.image = image
+                            productModel.imageUrl = image
+                        }
+                        else
+                        {
+                            productInsert.image = nil
+                            productModel.imageUrl = nil
+                        }
+                    }
+                    else
+                    {
+                        productInsert.image = nil
+                        productModel.imageUrl = nil
+                    }
+                    if keys.contains("largeImage")
+                    {
+                        if product["largeImage"] != nil
+                        {
+                            let largeImage = product["largeImage"] as! String
+                            productInsert.largeImage = largeImage
+                        }
+                        else
+                        {
+                            productInsert.largeImage = nil
+                        }
+                    }
+                    else
+                    {
+                        productInsert.largeImage = nil
+                    }
+                    self.productsModel.append(productModel)
+                    self.products.append(productInsert)
+                    self.context.insertObject(productInsert)
                 }
-                self.productsCollectionView.performBatchUpdates({ () -> Void in
-                    self.productsCollectionView.insertItemsAtIndexPaths(indexPaths)
-                    }, completion: { (_) -> Void in
-                        self.refreshControlBottom.endRefreshing()
-                })
+                self.productsCollectionView.reloadData()
+                do
+                {
+                    try self.context.save()
+                }
+                catch(_)
+                {
+                }
             }
             else if response.result.error?.code == NSURLErrorNotConnectedToInternet
             {
@@ -232,22 +355,62 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UICo
                 alertViewController.addAction(UIAlertAction(title: "OK", style: .Default, handler: nil))
                 self.presentViewController(alertViewController, animated: true, completion: nil)
             }
-        }
-        Alamofire.request(.GET, "http://api.bestbuy.com/v1/products(department=AUDIO)", parameters: ["show" : "name,salePrice,image,largeImage,manufacturer", "pageSize" : "100", "format" : "json", "apiKey" : "djshsuz99nvppzr6gqs8h2yk", "page" : page], encoding: .URL, headers: nil).responseData { (response) in
-            self.refreshControlBottom.endRefreshing()
+        })
+    }
+    func refreshBottom()
+    {
+        page++
+        userDefaults.setInteger(page, forKey: "page")
+        application.networkActivityIndicatorVisible = true
+        Alamofire.request(.GET, "http://api.bestbuy.com/v1/products(department=AUDIO)", parameters: ["show" : "name,salePrice,image,largeImage,manufacturer", "pageSize" : "100", "page" : page, "format" : "json", "apiKey" : "djshsuz99nvppzr6gqs8h2yk"], encoding: .URL, headers: nil).responseJSON(completionHandler: { (response) -> Void in
+            self.activityIndicatorView!.stopAnimating()
             self.application.networkActivityIndicatorVisible = false
             if response.result.error == nil
             {
-                //self.products = JSON(data: response.result.value!)["products"].arrayValue
+                let productsResult: NSArray = response.result.value!["products"] as! NSArray
+                for product in productsResult
+                {
+                    let productModel = ProductModel()
+                    let productInsert = NSEntityDescription.insertNewObjectForEntityForName("Product", inManagedObjectContext: self.context) as! Product
+                    let name = product["name"] as! String
+                    productInsert.name = name
+                    productModel.name = name
+                    if ((product as! NSDictionary).allKeys as! [String]).contains("manufacturer")
+                    {
+                        let brand = product["manufacturer"] as! String
+                        productInsert.brand = brand
+                        productModel.brand = brand
+                    }
+                    else
+                    {
+                        productInsert.brand = "Unknown"
+                        productModel.brand = "Unknown"
+                    }
+                    let price = product["salePrice"] as! Float
+                    productInsert.price = price
+                    self.products.append(productInsert)
+                    productModel.price = price
+                    productModel.imageUrl = product["image"] as? String
+                    productModel.largeImageUrl = product["largeImage"] as? String
+                    self.productsModel.append(productModel)
+                    self.context.insertObject(productInsert)
+                }
                 self.productsCollectionView.reloadData()
+                do
+                {
+                    try self.context.save()
+                }
+                catch(_)
+                {
+                }
             }
-            else if response.result.error == NSURLErrorNotConnectedToInternet
+            else if response.result.error?.code == NSURLErrorNotConnectedToInternet
             {
                 let alertViewController = UIAlertController(title: "Atention", message: "Internet connection not available", preferredStyle: .Alert)
                 alertViewController.addAction(UIAlertAction(title: "OK", style: .Default, handler: nil))
                 self.presentViewController(alertViewController, animated: true, completion: nil)
             }
-        }
+        })
     }
     override func didReceiveMemoryWarning()
     {
@@ -261,10 +424,30 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UICo
     {
         if !search
         {
+            if productsModel.count == 0
+            {
+                refreshControlTop.enabled = false
+                refreshControlBottom.enabled = false
+            }
+            else
+            {
+                refreshControlTop.enabled = true
+                refreshControlBottom.enabled = true
+            }
             return productsModel.count;
         }
         else
         {
+            if products1Model.count == 0
+            {
+                refreshControlTop.enabled = false
+                refreshControlBottom.enabled = false
+            }
+            else
+            {
+                refreshControlTop.enabled = true
+                refreshControlBottom.enabled = true
+            }
             return products1Model.count;
         }
     }
@@ -287,58 +470,32 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UICo
         cell.name.text = "Name: \(product.name)"
         cell.price.text = "Price: U$ \(product.price)"
         cell.photo.image = nil
-        if product.image == nil
+        cell.activityIndicatorView.startAnimating()
+        if product.imageUrl != nil && product.imageUrl != ""
         {
-            cell.activityIndicatorView.startAnimating()
-            let productInsert = products[indexPath.row]
-            if product.largeImageUrl != nil && product.largeImageUrl != ""
-            {
-                Alamofire.request(.GET, product.largeImageUrl!).responseData { (response) in
-                    product.image = UIImage(data: response.result.value!)
-                    dispatch_async(dispatch_get_main_queue(), { () -> Void in
-                        cell.activityIndicatorView.stopAnimating()
-                        let cell1 = collectionView.cellForItemAtIndexPath(indexPath) as? ProductCollectionViewCell
-                        if cell1 != nil
-                        {
-                            cell1!.photo.image = product.image
-                        }
-                    })
-                    productInsert.image = response.result.value!
-                    do
+            imageDownloader.downloadImage(URLRequest: NSURLRequest(URL: NSURL(string: product.imageUrl!)!, cachePolicy: .ReturnCacheDataElseLoad, timeoutInterval: 60), filter: ScaledToSizeFilter(size: CGSize(width: cell.photo.frame.width, height: cell.photo.frame.height)), completion: { (response) -> Void in
+                dispatch_async(dispatch_get_main_queue(), { () -> Void in
+                    cell.activityIndicatorView.stopAnimating()
+                    let cell1 = collectionView.cellForItemAtIndexPath(indexPath) as? ProductCollectionViewCell
+                    if cell1 != nil
                     {
-                        try self.context.save()
+                        cell1!.photo.image = response.result.value
                     }
-                    catch(_)
-                    {
-                    }
-                }
-            }
-            else if product.imageUrl != nil && product.imageUrl != ""
-            {
-                Alamofire.request(.GET, product.imageUrl!).responseData { (response) in
-                    product.image = UIImage(data: response.result.value!)
-                    dispatch_async(dispatch_get_main_queue(), { () -> Void in
-                        cell.activityIndicatorView.stopAnimating()
-                        let cell1 = collectionView.cellForItemAtIndexPath(indexPath) as? ProductCollectionViewCell
-                        if cell1 != nil
-                        {
-                            cell1!.photo.image = product.image
-                        }
-                    })
-                    productInsert.image = response.result.value!
-                    do
-                    {
-                        try self.context.save()
-                    }
-                    catch(_)
-                    {
-                    }
-                }
-            }
+                })
+            })
         }
-        else
+        else if product.largeImageUrl != nil && product.largeImageUrl != ""
         {
-            cell.photo.image = product.image
+            imageDownloader.downloadImage(URLRequest: NSURLRequest(URL: NSURL(string: product.largeImageUrl!)!, cachePolicy: .ReturnCacheDataElseLoad, timeoutInterval: 60), filter: ScaledToSizeFilter(size: CGSize(width: cell.photo.frame.width, height: cell.photo.frame.height)), completion: { (response) -> Void in
+                dispatch_async(dispatch_get_main_queue(), { () -> Void in
+                    cell.activityIndicatorView.stopAnimating()
+                    let cell1 = collectionView.cellForItemAtIndexPath(indexPath) as? ProductCollectionViewCell
+                    if cell1 != nil
+                    {
+                        cell1!.photo.image = response.result.value
+                    }
+                })
+            })
         }
         return cell
     }
@@ -351,16 +508,94 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UICo
     {
         if searchText != ""
         {
+//            products1Model = productsModel.filter({ (product) -> Bool in
+//                return product.name.hasPrefix(searchText)
+//            })
+//            if products1Model.count > 0
+//            {
+//                productsCollectionView.reloadData()
+//            }
+//            else
+//            {
+//                products1Model = []
+//                productsCollectionView.reloadData()
+//                application.networkActivityIndicatorVisible = true
+//                activityIndicatorView.startAnimating()
+//                request = Alamofire.request(.GET, "http://api.bestbuy.com/v1/products(department=AUDIO&search=\(searchText))", parameters: ["show" : "name,salePrice,image,largeImage,manufacturer", "pageSize" : "100", "format" : "json", "apiKey" : "djshsuz99nvppzr6gqs8h2yk"], encoding: .URL, headers: nil).responseData({ (response) -> Void in
+//                    self.activityIndicatorView.stopAnimating()
+//                    self.application.networkActivityIndicatorVisible = false
+//                    if response.result.error == nil
+//                    {
+//                        let productsResult = JSON(data: response.result.value!)["products"].arrayValue
+//                        for product in productsResult
+//                        {
+//                            let productModel = ProductModel()
+//                            let productInsert = NSEntityDescription.insertNewObjectForEntityForName("Product", inManagedObjectContext: self.context) as! Product
+//                            productInsert.name = product["name"].stringValue
+//                            productModel.name = product["name"].stringValue
+//                            if product["manufacturer"] == nil
+//                            {
+//                                productInsert.brand = "Unknown"
+//                                productModel.brand = "Unknown"
+//                            }
+//                            else
+//                            {
+//                                productInsert.brand = product["manufacturer"].stringValue
+//                                productModel.brand = product["manufacturer"].stringValue
+//                            }
+//                            productInsert.price = product["salePrice"].floatValue
+//                            self.products.append(productInsert)
+//                            productModel.price = product["salePrice"].floatValue
+//                            productModel.imageUrl = product["image"].stringValue
+//                            productModel.largeImageUrl = product["largeImage"].stringValue
+//                            self.products1Model.append(productModel)
+//                            self.context.insertObject(productInsert)
+//                        }
+//                        self.productsCollectionView.reloadData()
+//                        do
+//                        {
+//                            try self.context.save()
+//                        }
+//                        catch(_)
+//                        {
+//                        }
+//                    }
+//                    else if response.result.error?.code == NSURLErrorNotConnectedToInternet
+//                    {
+//                        let alertViewController = UIAlertController(title: "Atention", message: "Internet connection not available", preferredStyle: .Alert)
+//                        alertViewController.addAction(UIAlertAction(title: "OK", style: .Default, handler: nil))
+//                        self.presentViewController(alertViewController, animated: true, completion: nil)
+//                    }
+//                })
+//            }
         }
         else
         {
-            activityIndicatorView.stopAnimating()
+            products1Model = productsModel
+            productsCollectionView.reloadData()
         }
     }
     func searchBarCancelButtonClicked(searchBar: UISearchBar)
     {
+        request?.cancel()
         search = false
+        searchBar.text = ""
         searchBar.endEditing(true)
         searchBar.setShowsCancelButton(false, animated: true)
+    }
+    override func prepareForSegue(segue: UIStoryboardSegue, sender: AnyObject?)
+    {
+        if segue.identifier == "productDetail"
+        {
+            let productDetailViewController = segue.destinationViewController as! ProductDetailViewController
+            if search
+            {
+                productDetailViewController.product = products1Model[productsCollectionView.indexPathsForSelectedItems()![0].row]
+            }
+            else
+            {
+                productDetailViewController.product = productsModel[productsCollectionView.indexPathsForSelectedItems()![0].row]
+            }
+        }
     }
 }

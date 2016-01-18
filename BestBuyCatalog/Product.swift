@@ -1,9 +1,9 @@
 //
 //  Product.swift
-//  
+//  BestBuyCatalog
 //
-//  Created by Victor Bozelli Alvarez on 1/15/16.
-//
+//  Created by Victor Bozelli Alvarez on 1/17/16.
+//  Copyright © 2016 Bozelli. All rights reserved.
 //
 
 import Foundation
