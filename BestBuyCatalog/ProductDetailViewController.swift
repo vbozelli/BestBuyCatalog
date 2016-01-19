@@ -16,20 +16,21 @@ class ProductDetailViewController: UIViewController, UIScrollViewDelegate
     var product: Product!
     @IBOutlet var photo: UIImageView!
     @IBOutlet var scrollView: UIScrollView!
-    @IBOutlet var name: UILabel!
+    @IBOutlet var descriptionLabel: UILabel!
     @IBOutlet var brand: UILabel!
     @IBOutlet var price: UILabel!
     override func viewDidLoad()
     {
         super.viewDidLoad()
+        navigationItem.title = product.name
         photo.frame = scrollView.bounds
         scrollView.contentSize = scrollView.bounds.size
         //cached image
         imageDownloader.downloadImage(URLRequest: NSURLRequest(URL: NSURL(string: product.image!)!, cachePolicy: .ReturnCacheDataElseLoad, timeoutInterval: 60), filter: ScaledToSizeFilter(size: self.scrollView.bounds.size)) { (response) -> Void in
             self.photo.image = response.result.value
         }
-        name.text = "Name: \(product.name!)"
-        name.adjustsFontSizeToFitWidth = false
+        descriptionLabel.text = "Description: \(product.descriptionProduct!)"
+        descriptionLabel.adjustsFontSizeToFitWidth = false
         brand.text = "Brand: \(product.brand!)"
         price.text = "Price: U$ \(product.price)"
     }
@@ -37,14 +38,15 @@ class ProductDetailViewController: UIViewController, UIScrollViewDelegate
     {
         super.didReceiveMemoryWarning()
     }
-    @IBAction func share(sender: AnyObject)
+    //share on Facebook and Twitter
+    @IBAction func share(sender: UIBarButtonItem)
     {
         let alertController = UIAlertController(title: "Atention", message: "Select the social network to share the product", preferredStyle: .ActionSheet)
         alertController.addAction(UIAlertAction(title: "Facebook", style: .Default, handler: { (_) -> Void in
             if SLComposeViewController.isAvailableForServiceType(SLServiceTypeFacebook)
             {
                 let composeViewController = SLComposeViewController(forServiceType: SLServiceTypeFacebook)
-                composeViewController.setInitialText("\(self.name.text!)\n\(self.brand.text!)\n\(self.price.text!)")
+                composeViewController.setInitialText("Name: \(self.product.name!)\n\(self.descriptionLabel.text!)\n\(self.brand.text!)\n\(self.price.text!)")
                 composeViewController.addImage(self.photo.image)
                 self.presentViewController(composeViewController, animated: true, completion: nil)
             }
@@ -62,7 +64,7 @@ class ProductDetailViewController: UIViewController, UIScrollViewDelegate
             if SLComposeViewController.isAvailableForServiceType(SLServiceTypeTwitter)
             {
                 let composeViewController = SLComposeViewController(forServiceType: SLServiceTypeTwitter)
-                composeViewController.setInitialText("\(self.name.text!)\n\(self.brand.text!)\n\(self.price.text!)")
+                composeViewController.setInitialText("Name: \(self.product.name!)\n\(self.descriptionLabel.text!)\n\(self.brand.text!)\n\(self.price.text!)")
                 composeViewController.addImage(self.photo.image)
                 self.presentViewController(composeViewController, animated: true, completion: nil)
             }
@@ -77,6 +79,10 @@ class ProductDetailViewController: UIViewController, UIScrollViewDelegate
             }
         }))
         alertController.addAction(UIAlertAction(title: "Cancel", style: .Cancel, handler: nil))
+        if UIDevice.currentDevice().userInterfaceIdiom == .Pad
+        {
+            alertController.popoverPresentationController!.barButtonItem = sender
+        }
         presentViewController(alertController, animated: true, completion: nil)
     }
     func viewForZoomingInScrollView(scrollView: UIScrollView) -> UIView?

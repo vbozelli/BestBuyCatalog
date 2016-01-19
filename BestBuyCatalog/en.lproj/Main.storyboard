@@ -261,7 +261,7 @@
                     </navigationItem>
                     <connections>
                         <outlet property="brand" destination="1g5-1P-fO1" id="aeK-3m-6kP"/>
-                        <outlet property="name" destination="09v-o5-c2F" id="XQq-pn-Yvj"/>
+                        <outlet property="descriptionLabel" destination="09v-o5-c2F" id="iNc-JF-Xat"/>
                         <outlet property="photo" destination="cih-NR-81g" id="LKo-gS-SpX"/>
                         <outlet property="price" destination="Iv9-bp-rjU" id="H1y-eX-9Oy"/>
                         <outlet property="scrollView" destination="bpr-HG-QhG" id="McM-GJ-Taa"/>

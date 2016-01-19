@@ -61,7 +61,7 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UISe
             activityIndicatorView!.startAnimating()
             application.networkActivityIndicatorVisible = true
             //get products from BestBuy API and register on core data
-            Alamofire.request(.GET, "http://api.bestbuy.com/v1/products(department=AUDIO)", parameters: ["show" : "name,salePrice,image,largeImage,manufacturer", "pageSize" : "100", "format" : "json", "apiKey" : "djshsuz99nvppzr6gqs8h2yk"], encoding: .URL, headers: nil).responseJSON(completionHandler: { (response) -> Void in
+            Alamofire.request(.GET, "http://api.bestbuy.com/v1/products(department=AUDIO)", parameters: ["show" : "name,salePrice,image,largeImage,manufacturer,shortDescription,longDescription", "pageSize" : "100", "format" : "json", "apiKey" : "djshsuz99nvppzr6gqs8h2yk"], encoding: .URL, headers: nil).responseJSON(completionHandler: { (response) -> Void in
                 self.activityIndicatorView.stopAnimating()
                 self.application.networkActivityIndicatorVisible = false
                 if response.result.error == nil
@@ -91,11 +91,11 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UISe
         //current page
         if userDefaults.dictionaryRepresentation().keys.contains("page")
         {
-            userDefaults.setInteger(page, forKey: "page")
+            page = userDefaults.integerForKey("page")
         }
         else
         {
-            page = userDefaults.integerForKey("page")
+            userDefaults.setInteger(page, forKey: "page")
         }
     }
     //order by price
@@ -172,6 +172,8 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UISe
         application.networkActivityIndicatorVisible = true
         Alamofire.request(.GET, "http://api.bestbuy.com/v1/products(department=AUDIO)", parameters: ["show" : "name,salePrice,image,largeImage,manufacturer", "pageSize" : "100", "page" : page + 1, "format" : "json", "apiKey" : "djshsuz99nvppzr6gqs8h2yk"], encoding: .URL, headers: nil).responseJSON(completionHandler: { (response) -> Void in
             self.application.networkActivityIndicatorVisible = false
+            self.refreshControlBottom.endRefreshing()
+            print(response.request?.URLString)
             if response.result.error == nil
             {
                 let productsResult: NSArray = response.result.value!["products"] as! NSArray
@@ -183,11 +185,7 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UISe
                     indice++
                     indexPaths.append(NSIndexPath(forItem: indice, inSection: 0))
                 }
-                self.productsCollectionView.performBatchUpdates({ () -> Void in
-                    self.productsCollectionView.insertItemsAtIndexPaths(indexPaths)
-                }, completion: { (_) -> Void in
-                    self.refreshControlBottom.endRefreshing()
-                })
+                self.productsCollectionView.insertItemsAtIndexPaths(indexPaths)
                 self.page++
                 self.userDefaults.setInteger(self.page, forKey: "page")
                 do
@@ -267,7 +265,7 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UISe
         if product.image != nil
         {
             cell.activityIndicatorView.startAnimating()
-            //async image loading and image cache
+            //async image loading with image cache
             imageDownloader.downloadImage(URLRequest: NSURLRequest(URL: NSURL(string: product.image!)!, cachePolicy: .ReturnCacheDataElseLoad, timeoutInterval: 60), filter: ScaledToSizeFilter(size: CGSize(width: cell.photo.frame.width, height: cell.photo.frame.height)), completion: { (response) -> Void in
                 cell.activityIndicatorView.stopAnimating()
                 let cell1 = collectionView.cellForItemAtIndexPath(indexPath) as? ProductCollectionViewCell
@@ -440,6 +438,35 @@ class ProductsViewController: UIViewController, UICollectionViewDataSource, UISe
         else
         {
             productInsert.image = nil
+        }
+        if keys.contains("longDescription")
+        {
+            if !(product["longDescription"] is NSNull)
+            {
+                productInsert.descriptionProduct = product["longDescription"] as? String
+            }
+            else
+            {
+                if keys.contains("shortDescription")
+                {
+                    if !(product["shortDescription"] is NSNull)
+                    {
+                        productInsert.descriptionProduct = product["shortDescription"] as? String
+                    }
+                    else
+                    {
+                        productInsert.descriptionProduct = "Unknown"
+                    }
+                }
+                else
+                {
+                    productInsert.descriptionProduct = "Unknown"
+                }
+            }
+        }
+        else
+        {
+            productInsert.descriptionProduct = "Unknown"
         }
         self.products.append(productInsert)
         self.context.insertObject(productInsert)
